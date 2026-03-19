@@ -672,6 +672,57 @@
     padding: 60px 5vw 30px;
   }
 
+  /* --- RESPONSIVE OVERRIDES --- */
+
+/* Base responsiveness for images and containers */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* Tablet and Mobile adjustments */
+@media (max-width: 992px) {
+    body {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Stack elements vertically that were side-by-side */
+    .flex-row, .grid-container {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Adjust typography for smaller screens */
+    h1 { font-size: 2.5rem; }
+    h2 { font-size: 2rem; }
+
+    /* Ensure navigation is accessible or wraps */
+    nav ul {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    h1 { font-size: 1.8rem; }
+    
+    /* Force full width on buttons or cards */
+    .button, .card {
+        width: 100%;
+    }
+}
+  
   .footer-inner {
     max-width: 1400px; margin: 0 auto;
     display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 60px;

@@ -768,6 +768,69 @@
     color: var(--gold); border: 1px solid rgba(245,200,0,0.25);
     padding: 3px 9px; display: inline-block;
   }
+  /* --- RESPONSIVE OVERRIDES --- */
+
+/* 1. Global & Navigation */
+@media (max-width: 992px) {
+  nav { padding: 0 3vw; }
+  .nav-links, .nav-cta { display: none; } /* Hide menu on mobile - consider adding a burger menu later */
+  
+  .hero-content {
+    grid-template-columns: 1fr; /* Stack hero content vertically */
+    text-align: center;
+    gap: 40px;
+    padding-top: 100px;
+  }
+  
+  .hero-buttons { justify-content: center; }
+  .hero-stats { justify-content: center; }
+  .hero-accent-line { display: none; } /* Hide decorative line */
+}
+
+/* 2. Sections & Grids */
+@media (max-width: 768px) {
+  section { padding: 60px 5vw; }
+  
+  /* Stack Fixtures */
+  .fixtures-grid { grid-template-columns: 1fr; }
+  
+  /* Adjust News Grid */
+  .news-grid { grid-template-columns: 1fr; }
+  .news-card-img { height: 200px !important; }
+  
+  /* Adjust Tickets */
+  .tickets-grid { grid-template-columns: 1fr; }
+  
+  /* Adjust Merch */
+  .merch-grid { grid-template-columns: repeat(2, 1fr); }
+  
+  /* Footer */
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    text-align: center;
+  }
+  .footer-logo, .footer-socials { justify-content: center; }
+}
+
+/* 3. Small Mobile Adjustments */
+@media (max-width: 480px) {
+  .hero-title { font-size: 48px; }
+  .hero-number { font-size: 60vw; opacity: 0.02; }
+  
+  .btn-primary, .btn-outline {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .fixture-card {
+    padding: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .merch-grid { grid-template-columns: 1fr; }
+  }
+    
 </style>
 </head>
 <body>

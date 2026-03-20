@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goshen City Dedza Dynamos FC</title>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+  import { getFirestore, collection, getDocs, query, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+  // ── REPLACE WITH YOUR FIREBASE CONFIG ──
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // ── FIRESTORE LOADERS ──
+  async function loadFixtures() {
+    try {
+      const q = query(collection(db, 'fixtures'), orderBy('date', 'asc'), limit(4));
+      const snap = await getDocs(q);
+      const fixtures = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderFixtures(fixtures);
+    } catch(e) {
+      console.warn('Firestore not connected yet — showing demo data');
+    }
+  }
+
+  async function loadSquad() {
+    try {
+      const q = query(collection(db, 'squad'), orderBy('number', 'asc'), limit(6));
+      const snap = await getDocs(q);
+      const players = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (players.length) renderSquad(players);
+    } catch(e) { console.warn('Squad: using demo data'); }
+  }
+
+  async function loadNews() {
+    try {
+      const q = query(collection(db, 'news'), orderBy('date', 'desc'), limit(3));
+      const snap = await getDocs(q);
+      const news = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (news.length) renderNews(news);
+    } catch(e) { console.warn('News: using demo data'); }
+  }
+
+  // ── AUTH ──
+  window.fbAuth = auth;
+  window.fbSignIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window.fbSignUp = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
+  window.fbSignOut = () => signOut(auth);
+
+  onAuthStateChanged(auth, user => {
+    const bar = document.getElementById('user-bar');
+    const loginBtn = document.getElementById('nav-login-btn');
+    if (user) {
+      if (bar) bar.innerHTML = `
+        <span class="user-email">${user.email}</span>
+        <button onclick="fbSignOut()" class="btn-signout">Sign Out</button>
+      `;
+      if (loginBtn) loginBtn.textContent = 'My Account';
+    } else {
+      if (bar) bar.innerHTML = '';
+      if (loginBtn) loginBtn.textContent = 'Fan Login';
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    loadFixtures();
+    loadSquad();
+    loadNews();
+  });
+
+  // ── RENDERERS (override demo data if Firestore returns results) ──
+  function renderFixtures(fixtures) {
+    const grid = document.getElementById('fixtures-grid');
+    if (!grid || !fixtures.length) return;
+    grid.innerHTML = fixtures.map(f => `
+      <div class="fixture-row ${f.isNext ? 'is-next' : ''}">
+        <div class="fx-date">
+          <span class="fx-day">${new Date(f.date?.seconds*1000 || f.date).getDate()}</span>
+          <span class="fx-month">${new Date(f.date?.seconds*1000 || f.date).toLocaleString('default',{month:'short'}).toUpperCase()}</span>
+        </div>
+        <div class="fx-teams">
+          <span class="${f.homeTeam === 'Goshen Dynamos' ? 'fx-us' : ''}">${f.homeTeam}</span>
+          <span class="fx-vs">VS</span>
+          <span class="${f.awayTeam === 'Goshen Dynamos' ? 'fx-us' : ''}">${f.awayTeam}</span>
+        </div>
+        <div class="fx-meta">${f.competition} · ${f.venue}</div>
+        <div class="fx-right">
+          ${f.result ? `<span class="fx-score ${f.won ? 'score-win' : f.draw ? 'score-draw' : 'score-loss'}">${f.result}</span>` : `<span class="fx-pill">${f.isNext ? 'NEXT' : 'UPCOMING'}</span>`}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSquad(players) {
+    const grid = document.getElementById('squad-grid');
+    if (!grid) return;
+    grid.innerHTML = players.map(p => `
+      <div class="player-card">
+        <div class="pc-number">${p.number}</div>
+        <div class="pc-pos-badge">${p.position}</div>
+        <div class="pc-avatar">${playerSVG()}</div>
+        <div class="pc-info">
+          <div class="pc-name">${p.name}</div>
+          <div class="pc-role">${p.role}${p.captain ? ' · Captain' : ''}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderNews(articles) {
+    const grid = document.getElementById('news-grid');
+    if (!grid) return;
+    const [main, ...rest] = articles;
+    grid.innerHTML = `
+      <div class="news-main">
+        <div class="news-img-block"><span class="news-watermark">DYNAMOS</span></div>
+        <div class="news-body">
+          <span class="news-cat">${main.category}</span>
+          <h3 class="news-headline">${main.title}</h3>
+          <span class="news-date">${main.date}</span>
+        </div>
+      </div>
+      <div class="news-side">
+        ${rest.map(a => `
+          <div class="news-small">
+            <div class="news-img-small"><span class="news-watermark-sm">${a.category?.toUpperCase()}</span></div>
+            <div class="news-body-sm">
+              <span class="news-cat">${a.category}</span>
+              <h4 class="news-headline-sm">${a.title}</h4>
+              <span class="news-date">${a.date}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function playerSVG() {
+    return `<svg viewBox="0 0 110 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/>
+      <path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/>
+      <path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/>
+      <path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/>
+    </svg>`;
+  }
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ══════════════════════════════════════════
+   TOKENS
+══════════════════════════════════════════ */
+:root {
+  --gold:        #F5C800;
+  --gold-dim:    #C49D00;
+  --gold-glow:   rgba(245,200,0,0.18);
+  --ink:         #070707;
+  --ink-2:       #0f0f0f;
+  --ink-3:       #161616;
+  --ink-4:       #1f1f1f;
+  --ink-5:       #2a2a2a;
+  --white:       #FFFFFF;
+  --off-white:   #EDE9D8;
+  --muted:       #666;
+  --muted-2:     #444;
+  --radius:      0px;
+
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-cond:    'Barlow Condensed', sans-serif;
+  --font-body:    'Barlow', sans-serif;
+}
+
+/* ── RESET ── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; font-size: 16px; }
+body { background: var(--ink); color: var(--white); font-family: var(--font-body); overflow-x: hidden; }
+a { text-decoration: none; color: inherit; }
+img { max-width: 100%; display: block; }
+button { cursor: pointer; border: none; background: none; font: inherit; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: var(--ink); }
+::-webkit-scrollbar-thumb { background: var(--gold); }
+
+/* ══════════════════════════════════════════
+   USER BAR
+══════════════════════════════════════════ */
+#user-bar {
+  position: fixed; top: 0; right: 0; z-index: 200;
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 20px;
+  background: rgba(245,200,0,0.08);
+  border-bottom-left-radius: 4px;
+  min-height: 32px;
+}
+.user-email {
+  font-family: var(--font-cond); font-size: 11px;
+  letter-spacing: 1px; color: var(--gold);
+}
+.btn-signout {
+  font-family: var(--font-cond); font-size: 10px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ink); background: var(--gold);
+  padding: 3px 10px;
+}
+
+/* ══════════════════════════════════════════
+   NAV
+══════════════════════════════════════════ */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 68px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4vw;
+  background: rgba(7,7,7,0.96);
+  border-bottom: 1px solid rgba(245,200,0,0.1);
+  backdrop-filter: blur(12px);
+}
+
+.nav-logo { display: flex; align-items: center; gap: 12px; }
+.nav-crest-wrap { width: 42px; height: 42px; }
+.nav-crest-wrap svg { width: 100%; height: 100%; }
+.nav-club-name {
+  font-family: var(--font-display);
+  font-size: 19px; letter-spacing: 2px; color: var(--gold);
+  line-height: 1;
+}
+.nav-club-sub {
+  font-family: var(--font-cond);
+  font-size: 9px; letter-spacing: 3px; color: var(--muted);
+  text-transform: uppercase; line-height: 1; margin-top: 3px;
+}
+
+.nav-links {
+  display: flex; gap: 0; list-style: none;
+}
+.nav-links li a {
+  font-family: var(--font-cond);
+  font-size: 12px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted);
+  padding: 8px 16px; display: block;
+  transition: color .2s;
+  border-right: 1px solid rgba(255,255,255,0.04);
+}
+.nav-links li a:hover { color: var(--gold); }
+
+.nav-right { display: flex; align-items: center; gap: 8px; }
+
+#nav-login-btn {
+  font-family: var(--font-cond); font-size: 11px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold); border: 1px solid rgba(245,200,0,0.35);
+  padding: 8px 18px; transition: all .2s;
+}
+#nav-login-btn:hover { background: var(--gold-glow); }
+
+.nav-tickets-btn {
+  font-family: var(--font-cond); font-size: 11px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ink); background: var(--gold);
+  padding: 8px 18px; transition: background .2s;
+}
+.nav-tickets-btn:hover { background: #FFD700; }
+
+/* Hamburger */
+.nav-hamburger {
+  display: none; flex-direction: column; gap: 5px;
+  width: 28px; cursor: pointer; padding: 4px;
+}
+.nav-hamburger span {
+  display: block; height: 2px; background: var(--gold);
+  transition: all .3s;
+}
+
+/* Mobile menu */
+.mobile-menu {
+  display: none;
+  position: fixed; top: 68px; left: 0; right: 0;
+  background: rgba(7,7,7,0.98);
+  border-bottom: 1px solid rgba(245,200,0,0.1);
+  z-index: 99; padding: 20px 4vw;
+  flex-direction: column; gap: 4px;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  font-family: var(--font-cond); font-size: 16px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: color .2s;
+}
+.mobile-menu a:hover { color: var(--gold); }
+
+/* ══════════════════════════════════════════
+   TICKER
+══════════════════════════════════════════ */
+.ticker {
+  position: fixed; top: 68px; left: 0; right: 0; z-index: 90;
+  background: var(--gold);
+  height: 28px; overflow: hidden;
+  display: flex; align-items: center;
+}
+.ticker-track {
+  display: flex; gap: 48px;
+  animation: ticker-scroll 28s linear infinite;
+  white-space: nowrap; width: max-content;
+}
+.ticker-track span {
+  font-family: var(--font-cond);
+  font-size: 11px; font-weight: 700; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--ink);
+}
+.ticker-dot { opacity: 0.3; }
+@keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ══════════════════════════════════════════
+   HERO
+══════════════════════════════════════════ */
+.hero {
+  min-height: 100vh;
+  padding-top: calc(68px + 28px);
+  position: relative; overflow: hidden;
+  display: flex; align-items: center;
+  background: var(--ink);
+}
+
+/* Diagonal stripe texture */
+.hero::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: repeating-linear-gradient(
+    -52deg,
+    transparent, transparent 44px,
+    rgba(245,200,0,0.015) 44px, rgba(245,200,0,0.015) 45px
+  );
+}
+
+.hero-glow {
+  position: absolute; z-index: 0;
+  width: 700px; height: 700px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245,200,0,0.06) 0%, transparent 70%);
+  top: 50%; left: 55%; transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.hero-bg-num {
+  position: absolute; right: -2%; bottom: -5%; z-index: 0;
+  font-family: var(--font-display);
+  font-size: clamp(200px, 30vw, 400px);
+  line-height: .85; color: rgba(245,200,0,0.03);
+  user-select: none; pointer-events: none;
+  letter-spacing: -8px;
+}
+
+.hero-inner {
+  position: relative; z-index: 2;
+  width: 100%; max-width: 1360px;
+  margin: 0 auto; padding: 60px 4vw;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 80px; align-items: center;
+}
+
+/* Left */
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(245,200,0,0.08);
+  border: 1px solid rgba(245,200,0,0.25);
+  padding: 5px 14px; margin-bottom: 22px;
+}
+.hero-eyebrow-dot {
+  width: 5px; height: 5px; background: var(--gold);
+  border-radius: 50%; animation: blink 2s ease infinite;
+}
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+.hero-eyebrow span {
+  font-family: var(--font-cond); font-size: 10px;
+  font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--gold);
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(56px, 8vw, 110px);
+  line-height: .88; letter-spacing: 2px;
+  color: var(--white); margin-bottom: 14px;
+}
+.hero-title .t-gold { color: var(--gold); }
+.hero-title .t-ghost {
+  -webkit-text-stroke: 1px rgba(255,255,255,0.2);
+  color: transparent;
+}
+
+.hero-sub {
+  font-family: var(--font-cond);
+  font-size: 12px; font-weight: 400; letter-spacing: 6px;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 40px;
+}
+
+.hero-stats {
+  display: flex; gap: 40px; margin-bottom: 44px; flex-wrap: wrap;
+}
+.hs-item { display: flex; flex-direction: column; }
+.hs-num {
+  font-family: var(--font-display); font-size: 48px;
+  line-height: 1; color: var(--gold);
+}
+.hs-label {
+  font-family: var(--font-cond); font-size: 9px;
+  font-weight: 600; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.hero-divider { width: 48px; height: 1px; background: var(--gold); margin-bottom: 44px; opacity: .4; }
+
+.hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* Right — crest */
+.hero-crest-stage {
+  position: relative; width: 300px; height: 300px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1px solid rgba(245,200,0,0.15);
+  animation: spin-cw 22s linear infinite;
+}
+.ring::after {
+  content: ''; position: absolute; top: 6px; left: 50%;
+  transform: translateX(-50%);
+  width: 7px; height: 7px; background: var(--gold); border-radius: 50%;
+}
+.ring-2 {
+  position: absolute; inset: 22px; border-radius: 50%;
+  border: 1px solid rgba(245,200,0,0.08);
+  animation: spin-ccw 35s linear infinite;
+}
+@keyframes spin-cw  { to { transform: rotate(360deg); } }
+@keyframes spin-ccw { to { transform: rotate(-360deg); } }
+.hero-crest-svg { width: 180px; height: 180px; position: relative; z-index: 2; }
+
+/* ══════════════════════════════════════════
+   BUTTONS
+══════════════════════════════════════════ */
+.btn {
+  font-family: var(--font-cond); font-size: 12px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  padding: 13px 32px; display: inline-block; transition: all .2s;
+}
+.btn-solid { background: var(--gold); color: var(--ink); }
+.btn-solid:hover { background: #FFD700; transform: translateY(-1px); }
+.btn-line { color: var(--gold); border: 1px solid rgba(245,200,0,.35); }
+.btn-line:hover { background: var(--gold-glow); border-color: var(--gold); }
+
+/* ══════════════════════════════════════════
+   SECTION COMMON
+══════════════════════════════════════════ */
+.section-wrap { padding: 90px 4vw; }
+.section-inner { max-width: 1360px; margin: 0 auto; }
+
+.section-tag {
+  font-family: var(--font-cond); font-size: 10px;
+  font-weight: 700; letter-spacing: 4px; text-transform: uppercase;
+  color: var(--gold); display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.section-tag::before {
+  content: ''; display: block;
+  width: 20px; height: 1px; background: var(--gold);
+}
+
+.section-heading {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 4vw, 58px);
+  letter-spacing: 2px; line-height: 1;
+  color: var(--white); margin-bottom: 6px;
+}
+.section-heading .g { color: var(--gold); }
+
+.section-desc {
+  font-size: 14px; color: var(--muted); font-weight: 300;
+  line-height: 1.7; max-width: 500px; margin-bottom: 44px;
+}
+
+.section-footer {
+  margin-top: 28px;
+  display: flex; justify-content: flex-end;
+}
+
+/* ══════════════════════════════════════════
+   FIXTURES
+══════════════════════════════════════════ */
+.fixtures-wrap { background: var(--ink-2); }
+
+#fixtures-grid { margin-top: 36px; display: flex; flex-direction: column; gap: 1px; }
+
+.fixture-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto auto;
+  align-items: center; gap: 20px;
+  padding: 20px 24px;
+  background: var(--ink-2);
+  border-left: 3px solid transparent;
+  transition: background .2s, border-color .2s;
+}
+.fixture-row:hover { background: var(--ink-3); border-left-color: var(--gold); }
+.fixture-row.is-next { border-left-color: var(--gold); background: rgba(245,200,0,0.04); }
+
+.fx-date { display: flex; flex-direction: column; align-items: center; }
+.fx-day { font-family: var(--font-display); font-size: 30px; line-height: 1; color: var(--gold); }
+.fx-month { font-family: var(--font-cond); font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+
+.fx-teams {
+  font-family: var(--font-cond); font-size: 16px; font-weight: 600;
+  letter-spacing: .5px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.fx-us { color: var(--gold); }
+.fx-vs { font-size: 10px; color: var(--muted-2); letter-spacing: 2px; }
+.fx-meta { font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+
+.fx-score {
+  font-family: var(--font-display); font-size: 26px; letter-spacing: 3px;
+}
+.score-win  { color: var(--gold); }
+.score-draw { color: var(--muted); }
+.score-loss { color: #DC3232; }
+
+.fx-pill {
+  font-family: var(--font-cond); font-size: 9px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  background: var(--gold); color: var(--ink); padding: 4px 10px;
+}
+
+/* ── STANDINGS ── */
+.standings-wrap { margin-top: 60px; }
+
+.table-scroll { overflow-x: auto; }
+.standings-tbl {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--font-cond);
+}
+.standings-tbl th {
+  font-size: 9px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted);
+  padding: 10px 14px; text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.standings-tbl td {
+  padding: 11px 14px; font-size: 14px; color: var(--off-white);
+  border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.standings-tbl tr:hover td { background: rgba(255,255,255,.02); }
+.standings-tbl tr.us td {
+  background: rgba(245,200,0,.06); color: var(--gold); font-weight: 600;
+}
+.standings-tbl tr.us td:first-child { border-left: 3px solid var(--gold); }
+
+.form-pip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  font-size: 9px; font-weight: 700; margin-right: 2px;
+}
+.pip-w { background: rgba(0,200,80,.15); color: #00C850; }
+.pip-d { background: rgba(150,150,150,.15); color: #888; }
+.pip-l { background: rgba(220,50,50,.15); color: #DC3232; }
+
+/* ══════════════════════════════════════════
+   SQUAD
+══════════════════════════════════════════ */
+#squad-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  gap: 2px; margin-top: 36px;
+}
+
+.player-card {
+  background: var(--ink-3);
+  aspect-ratio: 3/4;
+  position: relative; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.player-card::after {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(245,200,0,0.07);
+  opacity: 0; transition: opacity .2s; z-index: 3;
+}
+.player-card:hover::after { opacity: 1; }
+
+.pc-number {
+  position: absolute; top: 12px; right: 12px; z-index: 1;
+  font-family: var(--font-display); font-size: 48px;
+  line-height: 1; color: rgba(245,200,0,0.12);
+}
+.pc-pos-badge {
+  position: absolute; top: 12px; left: 12px; z-index: 2;
+  font-family: var(--font-cond); font-size: 8px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  background: var(--gold); color: var(--ink); padding: 3px 7px;
+}
+.pc-avatar {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.pc-avatar svg { width: 100px; height: 130px; opacity: .3; }
+
+.pc-info {
+  position: relative; z-index: 2;
+  background: linear-gradient(to top, rgba(7,7,7,.98) 0%, transparent 100%);
+  padding: 36px 14px 14px;
+}
+.pc-name {
+  font-family: var(--font-cond); font-size: 14px;
+  font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--white);
+}
+.pc-role { font-size: 10px; color: var(--gold); font-weight: 400; letter-spacing: .5px; }
+
+/* ══════════════════════════════════════════
+   NEWS
+══════════════════════════════════════════ */
+.news-section-wrap { background: var(--ink-2); }
+
+#news-grid {
+  display: grid; grid-template-columns: 2fr 1fr;
+  gap: 2px; margin-top: 36px;
+}
+
+.news-main, .news-small {
+  background: var(--ink-3); cursor: pointer; overflow: hidden;
+  position: relative; transition: transform .2s;
+}
+.news-main:hover, .news-small:hover { transform: scale(1.005); }
+
+.news-img-block {
+  height: 260px; overflow: hidden;
+  background: linear-gradient(135deg, #0d0d0d, #1a1400);
+  display: flex; align-items: center; justify-content: center;
+}
+.news-watermark {
+  font-family: var(--font-display); font-size: 80px;
+  color: rgba(245,200,0,0.06); letter-spacing: 4px;
+}
+
+.news-side { display: flex; flex-direction: column; gap: 2px; }
+.news-img-small {
+  height: 120px; overflow: hidden;
+  background: linear-gradient(135deg, #0d0d0d, #0d130d);
+  display: flex; align-items: center; justify-content: center;
+}
+.news-watermark-sm {
+  font-family: var(--font-display); font-size: 40px;
+  color: rgba(245,200,0,0.07); letter-spacing: 3px;
+}
+
+.news-body { padding: 20px; }
+.news-body-sm { padding: 16px; }
+.news-cat {
+  font-family: var(--font-cond); font-size: 9px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase; color: var(--gold);
+  margin-bottom: 6px; display: block;
+}
+.news-headline {
+  font-family: var(--font-cond); font-size: 20px; font-weight: 700;
+  letter-spacing: .5px; line-height: 1.2; color: var(--white); margin-bottom: 8px;
+}
+.news-headline-sm {
+  font-family: var(--font-cond); font-size: 14px; font-weight: 600;
+  line-height: 1.25; color: var(--white); margin-bottom: 6px;
+}
+.news-date { font-size: 11px; color: var(--muted); }
+
+.news-main::after, .news-small::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: var(--gold);
+  transform: scaleX(0); transform-origin: left; transition: transform .3s;
+}
+.news-main:hover::after, .news-small:hover::after { transform: scaleX(1); }
+
+/* ══════════════════════════════════════════
+   ABOUT TEASER
+══════════════════════════════════════════ */
+.about-wrap {
+  background: linear-gradient(135deg, var(--ink) 0%, #110e00 60%, var(--ink) 100%);
+  position: relative; overflow: hidden;
+}
+.about-glow {
+  position: absolute; bottom: -200px; right: -200px;
+  width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(245,200,0,0.055) 0%, transparent 70%);
+  pointer-events: none;
+}
+.about-inner-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 80px; align-items: center;
+}
+.about-quote {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1.05; letter-spacing: 2px; color: var(--white);
+  margin-bottom: 28px;
+}
+.about-quote .g { color: var(--gold); }
+.about-body {
+  font-size: 14px; color: var(--muted); font-weight: 300;
+  line-height: 1.8; margin-bottom: 32px;
+}
+.about-pillars {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+.about-pillar {
+  background: rgba(245,200,0,0.05);
+  border: 1px solid rgba(245,200,0,0.1);
+  padding: 18px;
+}
+.ap-icon { font-size: 22px; margin-bottom: 8px; }
+.ap-title {
+  font-family: var(--font-cond); font-size: 13px;
+  font-weight: 700; letter-spacing: 1px; color: var(--gold);
+  margin-bottom: 4px;
+}
+.ap-desc { font-size: 12px; color: var(--muted); font-weight: 300; line-height: 1.5; }
+
+.about-crest-block {
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+}
+.about-crest-ring {
+  width: 280px; height: 280px;
+  border: 1px solid rgba(245,200,0,0.12);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  animation: spin-cw 30s linear infinite;
+}
+.about-crest-ring::before {
+  content: ''; position: absolute; top: 10px; left: 50%;
+  transform: translateX(-50%);
+  width: 6px; height: 6px; background: var(--gold); border-radius: 50%;
+}
+.about-crest-inner { animation: spin-ccw 30s linear infinite; }
+.about-stats-row {
+  display: flex; gap: 32px; flex-wrap: wrap; justify-content: center;
+}
+.ast-item { text-align: center; }
+.ast-num { font-family: var(--font-display); font-size: 38px; color: var(--gold); line-height: 1; }
+.ast-lbl { font-family: var(--font-cond); font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+
+/* ══════════════════════════════════════════
+   FAN LOGIN TEASER
+══════════════════════════════════════════ */
+.login-section {
+  background: var(--ink-2);
+}
+.login-inner {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 60px; align-items: center;
+}
+.login-promo h2 {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 4vw, 58px);
+  letter-spacing: 2px; line-height: 1; color: var(--white);
+  margin-bottom: 16px;
+}
+.login-promo h2 span { color: var(--gold); }
+.login-promo p {
+  font-size: 14px; color: var(--muted); line-height: 1.7;
+  font-weight: 300; margin-bottom: 28px;
+}
+.login-perks { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.login-perks li {
+  font-family: var(--font-cond); font-size: 14px; font-weight: 500;
+  letter-spacing: .5px; color: var(--off-white);
+  display: flex; align-items: center; gap: 10px;
+}
+.login-perks li::before {
+  content: ''; display: block; width: 5px; height: 5px;
+  background: var(--gold); flex-shrink: 0;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.login-box {
+  background: var(--ink-3);
+  border: 1px solid rgba(245,200,0,0.12);
+  padding: 36px;
+}
+.login-tabs {
+  display: flex; gap: 0; margin-bottom: 28px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.ltab {
+  font-family: var(--font-cond); font-size: 13px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); padding: 10px 20px; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; transition: all .2s; cursor: pointer;
+}
+.ltab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+.login-form { display: flex; flex-direction: column; gap: 12px; }
+.lf-group { display: flex; flex-direction: column; gap: 4px; }
+.lf-label {
+  font-family: var(--font-cond); font-size: 9px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted);
+}
+.lf-input {
+  background: var(--ink-4);
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--white); font-family: var(--font-body);
+  font-size: 14px; padding: 11px 14px; outline: none;
+  transition: border-color .2s;
+}
+.lf-input:focus { border-color: rgba(245,200,0,.4); }
+.lf-input::placeholder { color: var(--muted-2); }
+.lf-error { font-size: 12px; color: #DC3232; margin-top: -4px; display: none; }
+.lf-error.show { display: block; }
+
+.btn-auth {
+  font-family: var(--font-cond); font-size: 12px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  background: var(--gold); color: var(--ink);
+  padding: 13px; margin-top: 6px; transition: background .2s;
+}
+.btn-auth:hover { background: #FFD700; }
+
+/* ══════════════════════════════════════════
+   TICKETS TEASER
+══════════════════════════════════════════ */
+.tickets-wrap {
+  background: linear-gradient(135deg, var(--ink), #1a1500 50%, var(--ink));
+  position: relative; overflow: hidden;
+}
+.tickets-glow {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px; height: 500px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(245,200,0,0.07) 0%, transparent 70%);
+  pointer-events: none;
+}
+.tickets-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: 44px;
+}
+.ticket-card {
+  background: var(--ink-3);
+  border: 1px solid rgba(245,200,0,0.1);
+  padding: 36px; position: relative; overflow: hidden;
+  transition: border-color .2s, transform .2s;
+}
+.ticket-card:hover { border-color: rgba(245,200,0,.35); transform: translateY(-2px); }
+.ticket-card.featured { border-color: rgba(245,200,0,.35); }
+.ticket-corner {
+  position: absolute; top: 0; right: 0;
+  border-top: 36px solid var(--gold); border-left: 36px solid transparent;
+}
+
+.tc-label {
+  font-family: var(--font-cond); font-size: 9px;
+  font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px; display: block;
+}
+.tc-name {
+  font-family: var(--font-display); font-size: 34px;
+  letter-spacing: 2px; line-height: 1; color: var(--white); margin-bottom: 12px;
+}
+.tc-desc { font-size: 13px; color: var(--muted); line-height: 1.6; font-weight: 300; margin-bottom: 20px; }
+.tc-price {
+  display: flex; align-items: baseline; gap: 4px; margin-bottom: 24px;
+}
+.tc-currency { font-family: var(--font-cond); font-size: 17px; font-weight: 600; color: var(--gold); }
+.tc-amount { font-family: var(--font-display); font-size: 50px; line-height: 1; color: var(--white); }
+.tc-per { font-size: 12px; color: var(--muted); }
+
+.coming-soon-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(245,200,0,0.08);
+  border: 1px solid rgba(245,200,0,0.25);
+  padding: 10px 20px; margin-bottom: 12px;
+}
+.cs-dot { width: 5px; height: 5px; background: var(--gold); border-radius: 50%; animation: blink 2s infinite; }
+.cs-text {
+  font-family: var(--font-cond); font-size: 11px;
+  font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--gold);
+}
+
+.btn-coming {
+  font-family: var(--font-cond); font-size: 12px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); border: 1px solid rgba(255,255,255,.12);
+  padding: 13px 0; width: 100%; text-align: center; cursor: default;
+}
+
+.eventcore-strip {
+  margin-top: 12px; padding: 10px 16px;
+  background: rgba(245,200,0,0.04);
+  border: 1px solid rgba(245,200,0,0.1);
+  display: flex; align-items: center; gap: 10px;
+}
+.eventcore-strip p { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.eventcore-strip p strong { color: var(--gold); font-weight: 600; }
+
+/* ══════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════ */
+footer {
+  background: var(--ink);
+  border-top: 1px solid rgba(255,255,255,.05);
+  padding: 56px 4vw 28px;
+}
+.footer-inner {
+  max-width: 1360px; margin: 0 auto;
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 52px; margin-bottom: 44px;
+}
+.footer-tagline { font-size: 13px; color: var(--muted); line-height: 1.7; font-weight: 300; max-width: 260px; margin: 16px 0 20px; }
+.footer-socials { display: flex; gap: 8px; }
+.fsoc {
+  width: 34px; height: 34px;
+  border: 1px solid rgba(255,255,255,.08);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-cond); font-size: 10px; font-weight: 700;
+  color: var(--muted); transition: all .2s; cursor: pointer;
+}
+.fsoc:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
+
+.footer-col h4 {
+  font-family: var(--font-cond); font-size: 10px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase; color: var(--gold);
+  margin-bottom: 18px;
+}
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.footer-col ul a { font-size: 13px; color: var(--muted); font-weight: 300; transition: color .2s; }
+.footer-col ul a:hover { color: var(--white); }
+
+.footer-bottom {
+  max-width: 1360px; margin: 0 auto;
+  border-top: 1px solid rgba(255,255,255,.05);
+  padding-top: 22px;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+}
+.footer-bottom p { font-size: 11px; color: var(--muted); font-weight: 300; }
+.footer-bottom p strong { color: var(--gold); font-weight: 600; }
+
+/* ══════════════════════════════════════════
+   MODAL (auth)
+══════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(7,7,7,0.88);
+  display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--ink-3); border: 1px solid rgba(245,200,0,0.2);
+  width: 100%; max-width: 420px;
+  padding: 40px; position: relative;
+}
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  font-size: 18px; color: var(--muted); cursor: pointer;
+  transition: color .2s;
+}
+.modal-close:hover { color: var(--gold); }
+.modal-title {
+  font-family: var(--font-display); font-size: 32px;
+  letter-spacing: 2px; color: var(--gold); margin-bottom: 24px;
+}
+
+/* ══════════════════════════════════════════
+   ADMIN PANEL TEASER
+══════════════════════════════════════════ */
+.admin-banner {
+  background: rgba(245,200,0,0.06);
+  border-top: 1px solid rgba(245,200,0,0.15);
+  border-bottom: 1px solid rgba(245,200,0,0.15);
+  padding: 14px 4vw;
+  display: none;
+}
+.admin-banner.visible { display: block; }
+.admin-banner-inner {
+  max-width: 1360px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.admin-banner p {
+  font-family: var(--font-cond); font-size: 12px;
+  font-weight: 600; letter-spacing: 1px; color: var(--gold);
+}
+.admin-banner-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-admin {
+  font-family: var(--font-cond); font-size: 10px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ink); background: var(--gold);
+  padding: 7px 16px; transition: background .2s;
+}
+.btn-admin:hover { background: #FFD700; }
+.btn-admin-line {
+  font-family: var(--font-cond); font-size: 10px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold); border: 1px solid rgba(245,200,0,.35);
+  padding: 7px 16px; transition: background .2s;
+}
+.btn-admin-line:hover { background: var(--gold-glow); }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  #squad-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .nav-links { display: none; }
+  .nav-hamburger { display: flex; }
+  .nav-tickets-btn { display: none; }
+
+  .hero-inner { grid-template-columns: 1fr; text-align: center; gap: 40px; }
+  .hero-crest-stage { width: 220px; height: 220px; margin: 0 auto; order: -1; }
+  .hero-crest-svg { width: 130px; height: 130px; }
+  .hero-stats { justify-content: center; gap: 24px; }
+  .hero-btns { justify-content: center; }
+  .hero-divider { margin: 0 auto 44px; }
+
+  .fixture-row { grid-template-columns: 52px 1fr auto; }
+  .fx-meta { display: none; }
+
+  #squad-grid { grid-template-columns: repeat(2, 1fr); }
+
+  #news-grid { grid-template-columns: 1fr; }
+
+  .about-inner-grid { grid-template-columns: 1fr; gap: 48px; }
+  .about-crest-block { display: none; }
+
+  .login-inner { grid-template-columns: 1fr; gap: 40px; }
+
+  .tickets-grid { grid-template-columns: 1fr; }
+
+  .footer-inner { grid-template-columns: 1fr 1fr; gap: 36px; }
+  .footer-bottom { flex-direction: column; text-align: center; }
+}
+
+@media (max-width: 600px) {
+  .section-wrap { padding: 64px 4vw; }
+  #squad-grid { grid-template-columns: repeat(2, 1fr); }
+  .about-pillars { grid-template-columns: 1fr; }
+  .fixture-row { padding: 16px; gap: 12px; }
+  .footer-inner { grid-template-columns: 1fr; }
+  .login-box { padding: 24px; }
+  .tickets-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ USER BAR ═══ -->
+<div id="user-bar"></div>
+
+<!-- ═══ ADMIN BANNER ═══ -->
+<div class="admin-banner" id="admin-banner">
+  <div class="admin-banner-inner">
+    <p>⚡ Admin Mode — Manage club content</p>
+    <div class="admin-banner-btns">
+      <button class="btn-admin" onclick="alert('Admin: Fixtures Manager\n\nFirestore collection: fixtures\nFields: homeTeam, awayTeam, date, venue, competition, result, isNext')">Manage Fixtures</button>
+      <button class="btn-admin" onclick="alert('Admin: Squad Manager\n\nFirestore collection: squad\nFields: name, number, position, role, captain')">Manage Squad</button>
+      <button class="btn-admin" onclick="alert('Admin: News Manager\n\nFirestore collection: news\nFields: title, category, date, body, imageUrl')">Manage News</button>
+      <button class="btn-admin-line" onclick="alert('Admin: User Roles\n\nFirestore collection: users\nFields: email, role (admin|editor|viewer)')">User Roles</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ NAV ═══ -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="nav-crest-wrap">
+      <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="40,4 72,18 72,54 40,76 8,54 8,18" fill="#070707" stroke="#F5C800" stroke-width="2"/>
+        <polygon points="40,12 64,23 64,51 40,68 16,51 16,23" fill="none" stroke="rgba(245,200,0,0.22)" stroke-width="1"/>
+        <text x="40" y="38" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="18" fill="#F5C800" letter-spacing="1">GC</text>
+        <text x="40" y="55" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="11" fill="rgba(245,200,0,0.55)" letter-spacing="2">DYNAMOS</text>
+      </svg>
+    </div>
+    <div>
+      <div class="nav-club-name">Goshen City</div>
+      <div class="nav-club-sub">Dedza Dynamos FC · Est. 2024</div>
+    </div>
+  </a>
+
+  <ul class="nav-links">
+    <li><a href="#fixtures">Fixtures</a></li>
+    <li><a href="#squad">Squad</a></li>
+    <li><a href="#news">News</a></li>
+    <li><a href="#about">Club</a></li>
+    <li><a href="#fan-zone">Fan Zone</a></li>
+  </ul>
+
+  <div class="nav-right">
+    <button id="nav-login-btn" class="btn-line btn" onclick="openModal()">Fan Login</button>
+    <a href="#tickets" class="nav-tickets-btn btn">Tickets</a>
+    <div class="nav-hamburger" id="hamburger" onclick="toggleMenu()">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobile-menu">
+  <a href="#fixtures" onclick="toggleMenu()">Fixtures</a>
+  <a href="#squad" onclick="toggleMenu()">Squad</a>
+  <a href="#news" onclick="toggleMenu()">News</a>
+  <a href="#about" onclick="toggleMenu()">About the Club</a>
+  <a href="#fan-zone" onclick="toggleMenu()">Fan Zone</a>
+  <a href="#tickets" onclick="toggleMenu()">Tickets</a>
+</div>
+
+<!-- ═══ TICKER ═══ -->
+<div class="ticker" style="margin-top:68px;">
+  <div class="ticker-track">
+    <span>DYNAMOS FC</span><span class="ticker-dot">✦</span>
+    <span>YELLOW & BLACK FOREVER</span><span class="ticker-dot">✦</span>
+    <span>GOSHEN CITY PRIDE</span><span class="ticker-dot">✦</span>
+    <span>TNM SUPER LEAGUE 2024-25</span><span class="ticker-dot">✦</span>
+    <span>DEDZA STRONG</span><span class="ticker-dot">✦</span>
+    <span>THE DYNAMOS WAY</span><span class="ticker-dot">✦</span>
+    <span>TICKETS COMING SOON VIA EVENTCORE AFRICA</span><span class="ticker-dot">✦</span>
+    <span>DYNAMOS FC</span><span class="ticker-dot">✦</span>
+    <span>YELLOW & BLACK FOREVER</span><span class="ticker-dot">✦</span>
+    <span>GOSHEN CITY PRIDE</span><span class="ticker-dot">✦</span>
+    <span>TNM SUPER LEAGUE 2024-25</span><span class="ticker-dot">✦</span>
+    <span>DEDZA STRONG</span><span class="ticker-dot">✦</span>
+    <span>THE DYNAMOS WAY</span><span class="ticker-dot">✦</span>
+    <span>TICKETS COMING SOON VIA EVENTCORE AFRICA</span><span class="ticker-dot">✦</span>
+  </div>
+</div>
+
+<!-- ═══ HERO ═══ -->
+<div class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-bg-num">11</div>
+  <div class="hero-inner">
+    <div class="hero-left">
+      <div class="hero-eyebrow">
+        <div class="hero-eyebrow-dot"></div>
+        <span>2024–25 TNM Super League</span>
+      </div>
+      <h1 class="hero-title">
+        <span class="t-gold">Goshen</span><br>
+        City<br>
+        <span class="t-ghost">Dynamos</span>
+      </h1>
+      <p class="hero-sub">Dedza · Malawi · Top Flight</p>
+      <div class="hero-divider"></div>
+      <div class="hero-stats">
+        <div class="hs-item"><span class="hs-num">12</span><span class="hs-label">Played</span></div>
+        <div class="hs-item"><span class="hs-num">7</span><span class="hs-label">Wins</span></div>
+        <div class="hs-item"><span class="hs-num">3rd</span><span class="hs-label">Position</span></div>
+        <div class="hs-item"><span class="hs-num">23</span><span class="hs-label">Points</span></div>
+      </div>
+      <div class="hero-btns">
+        <a href="#fixtures" class="btn btn-solid">Next Match</a>
+        <a href="#squad" class="btn btn-line">Our Squad</a>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="hero-crest-stage">
+        <div class="ring"></div>
+        <div class="ring-2"></div>
+        <svg class="hero-crest-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M100 8 L176 36 L176 112 L100 192 L24 112 L24 36 Z" fill="#111" stroke="#F5C800" stroke-width="2.5"/>
+          <path d="M100 18 L166 42 L166 108 L100 178 L34 108 L34 42 Z" fill="none" stroke="rgba(245,200,0,0.18)" stroke-width="1"/>
+          <line x1="34" y1="95" x2="166" y2="95" stroke="#F5C800" stroke-width="1.5" stroke-opacity="0.45"/>
+          <text x="100" y="75" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="44" fill="#F5C800" letter-spacing="4">GC</text>
+          <text x="100" y="116" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="13" fill="#F5C800" letter-spacing="3">DYNAMOS</text>
+          <text x="100" y="134" text-anchor="middle" font-family="'Barlow Condensed',sans-serif" font-size="9" fill="rgba(245,200,0,0.5)" letter-spacing="4">DEDZA · MALAWI</text>
+          <polygon points="100,148 103,157 112,157 105,163 108,172 100,167 92,172 95,163 88,157 97,157" fill="#F5C800" opacity="0.65"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FIXTURES ═══ -->
+<div class="section-wrap fixtures-wrap" id="fixtures">
+  <div class="section-inner">
+    <div class="section-tag">Fixtures &amp; Results</div>
+    <h2 class="section-heading">Match <span class="g">Schedule</span></h2>
+    <p class="section-desc">TNM Super League 2024–25 season. Live from Firestore.</p>
+
+    <!-- Demo data (replaced by Firestore if connected) -->
+    <div id="fixtures-grid">
+      <div class="fixture-row">
+        <div class="fx-date"><span class="fx-day">12</span><span class="fx-month">Jan</span></div>
+        <div class="fx-teams"><span class="fx-us">Goshen Dynamos</span><span class="fx-vs">VS</span>Silver Strikers</div>
+        <div class="fx-meta">TNM Super League · Dedza Stadium · 15:00</div>
+        <div class="fx-right"><span class="fx-score score-win">2–0</span></div>
+      </div>
+      <div class="fixture-row">
+        <div class="fx-date"><span class="fx-day">19</span><span class="fx-month">Jan</span></div>
+        <div class="fx-teams">Mighty Wanderers<span class="fx-vs">VS</span><span class="fx-us">Goshen Dynamos</span></div>
+        <div class="fx-meta">TNM Super League · Kamuzu Stadium · 15:00</div>
+        <div class="fx-right"><span class="fx-score score-win">1–3</span></div>
+      </div>
+      <div class="fixture-row">
+        <div class="fx-date"><span class="fx-day">26</span><span class="fx-month">Jan</span></div>
+        <div class="fx-teams"><span class="fx-us">Goshen Dynamos</span><span class="fx-vs">VS</span>Blue Eagles</div>
+        <div class="fx-meta">TNM Super League · Dedza Stadium · 15:00</div>
+        <div class="fx-right"><span class="fx-score score-draw">1–1</span></div>
+      </div>
+      <div class="fixture-row is-next">
+        <div class="fx-date"><span class="fx-day">08</span><span class="fx-month">Feb</span></div>
+        <div class="fx-teams">FC Karonga<span class="fx-vs">VS</span><span class="fx-us">Goshen Dynamos</span></div>
+        <div class="fx-meta">TNM Super League · Karonga Stadium · 15:00</div>
+        <div class="fx-right"><span class="fx-pill">NEXT</span></div>
+      </div>
+    </div>
+
+    <div class="section-footer">
+      <a href="#" class="btn btn-line">All Fixtures &amp; Results →</a>
+    </div>
+
+    <!-- Standings -->
+    <div class="standings-wrap">
+      <div class="section-tag">League Table</div>
+      <h2 class="section-heading">Standing<span class="g">s</span></h2>
+      <div class="table-scroll">
+        <table class="standings-tbl">
+          <thead>
+            <tr>
+              <th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th><th>Form</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td><td>Mighty Wanderers</td><td>13</td><td>9</td><td>2</td><td>2</td><td>+14</td><td><strong>29</strong></td>
+              <td><span class="form-pip pip-w">W</span><span class="form-pip pip-w">W</span><span class="form-pip pip-d">D</span><span class="form-pip pip-w">W</span><span class="form-pip pip-w">W</span></td>
+            </tr>
+            <tr>
+              <td>2</td><td>Silver Strikers</td><td>13</td><td>8</td><td>2</td><td>3</td><td>+9</td><td><strong>26</strong></td>
+              <td><span class="form-pip pip-l">L</span><span class="form-pip pip-w">W</span><span class="form-pip pip-w">W</span><span class="form-pip pip-d">D</span><span class="form-pip pip-w">W</span></td>
+            </tr>
+            <tr class="us">
+              <td>3</td><td>⚡ Goshen City Dedza Dynamos</td><td>12</td><td>7</td><td>2</td><td>3</td><td>+8</td><td><strong>23</strong></td>
+              <td><span class="form-pip pip-w">W</span><span class="form-pip pip-w">W</span><span class="form-pip pip-l">L</span><span class="form-pip pip-w">W</span><span class="form-pip pip-d">D</span></td>
+            </tr>
+            <tr>
+              <td>4</td><td>Blue Eagles</td><td>13</td><td>6</td><td>3</td><td>4</td><td>+4</td><td><strong>21</strong></td>
+              <td><span class="form-pip pip-d">D</span><span class="form-pip pip-w">W</span><span class="form-pip pip-l">L</span><span class="form-pip pip-w">W</span><span class="form-pip pip-d">D</span></td>
+            </tr>
+            <tr>
+              <td>5</td><td>FC Karonga</td><td>13</td><td>5</td><td>4</td><td>4</td><td>+1</td><td><strong>19</strong></td>
+              <td><span class="form-pip pip-w">W</span><span class="form-pip pip-d">D</span><span class="form-pip pip-d">D</span><span class="form-pip pip-l">L</span><span class="form-pip pip-w">W</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section-footer">
+        <a href="#" class="btn btn-line">Full League Table →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SQUAD ═══ -->
+<div class="section-wrap" id="squad">
+  <div class="section-inner">
+    <div class="section-tag">First Team</div>
+    <h2 class="section-heading">The <span class="g">Squad</span></h2>
+    <p class="section-desc">Our warriors in yellow and black. Powered by Firestore — updated in real time.</p>
+
+    <div id="squad-grid">
+      <!-- Demo players (replaced by Firestore) -->
+      <div class="player-card">
+        <div class="pc-number">1</div><span class="pc-pos-badge">GK</span>
+        <div class="pc-avatar"><svg viewBox="0 0 110 140" fill="none"><ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/><path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/><path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/><path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/></svg></div>
+        <div class="pc-info"><div class="pc-name">T. Phiri</div><div class="pc-role">Goalkeeper</div></div>
+      </div>
+      <div class="player-card">
+        <div class="pc-number">5</div><span class="pc-pos-badge">CB</span>
+        <div class="pc-avatar"><svg viewBox="0 0 110 140" fill="none"><ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/><path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/><path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/><path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/></svg></div>
+        <div class="pc-info"><div class="pc-name">M. Banda</div><div class="pc-role">Centre Back · Captain</div></div>
+      </div>
+      <div class="player-card">
+        <div class="pc-number">3</div><span class="pc-pos-badge">LB</span>
+        <div class="pc-avatar"><svg viewBox="0 0 110 140" fill="none"><ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/><path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/><path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/><path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/></svg></div>
+        <div class="pc-info"><div class="pc-name">C. Tembo</div><div class="pc-role">Left Back</div></div>
+      </div>
+      <div class="player-card">
+        <div class="pc-number">8</div><span class="pc-pos-badge">CM</span>
+        <div class="pc-avatar"><svg viewBox="0 0 110 140" fill="none"><ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/><path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/><path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/><path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/></svg></div>
+        <div class="pc-info"><div class="pc-name">J. Chisomo</div><div class="pc-role">Central Midfield</div></div>
+      </div>
+      <div class="player-card">
+        <div class="pc-number">10</div><span class="pc-pos-badge">AM</span>
+        <div class="pc-avatar"><svg viewBox="0 0 110 140" fill="none"><ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/><path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/><path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/><path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/></svg></div>
+        <div class="pc-info"><div class="pc-name">K. Mwale</div><div class="pc-role">Attacking Mid</div></div>
+      </div>
+      <div class="player-card">
+        <div class="pc-number">9</div><span class="pc-pos-badge">ST</span>
+        <div class="pc-avatar"><svg viewBox="0 0 110 140" fill="none"><ellipse cx="55" cy="22" rx="16" ry="18" fill="rgba(245,200,0,0.45)"/><path d="M25 60 Q30 40 55 38 Q80 40 85 60 L90 110 L70 112 L65 80 L55 85 L45 80 L40 112 L20 110 Z" fill="rgba(245,200,0,0.4)"/><path d="M30 62 L10 90 L22 95 L40 72" fill="rgba(245,200,0,0.25)"/><path d="M80 62 L100 90 L88 95 L70 72" fill="rgba(245,200,0,0.25)"/></svg></div>
+        <div class="pc-info"><div class="pc-name">D. Mvula</div><div class="pc-role">Striker · Top Scorer</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <p style="font-size:13px; color:var(--muted); font-weight:300;">Showing 6 of 25 registered players</p>
+      <a href="#" class="btn btn-solid">Meet the Full Squad →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ NEWS ═══ -->
+<div class="section-wrap news-section-wrap" id="news">
+  <div class="section-inner">
+    <div class="section-tag">Latest</div>
+    <h2 class="section-heading">Club <span class="g">News</span></h2>
+    <p class="section-desc">Match reports, transfers, club updates — powered by Firestore.</p>
+
+    <div id="news-grid">
+      <div class="news-main">
+        <div class="news-img-block"><span class="news-watermark">DYNAMOS</span></div>
+        <div class="news-body">
+          <span class="news-cat">Match Report</span>
+          <h3 class="news-headline">Dynamos Demolish Wanderers 3–1 Away in Statement Performance</h3>
+          <span class="news-date">29 January 2025</span>
+        </div>
+      </div>
+      <div class="news-side">
+        <div class="news-small">
+          <div class="news-img-small"><span class="news-watermark-sm">TRANSFER</span></div>
+          <div class="news-body-sm">
+            <span class="news-cat">Transfer</span>
+            <h4 class="news-headline-sm">Two New Signings Confirmed Ahead of February Fixtures</h4>
+            <span class="news-date">25 January 2025</span>
+          </div>
+        </div>
+        <div class="news-small">
+          <div class="news-img-small"><span class="news-watermark-sm">CLUB</span></div>
+          <div class="news-body-sm">
+            <span class="news-cat">Club</span>
+            <h4 class="news-headline-sm">Goshen City FC Partners With EventCore Africa for Digital Ticketing</h4>
+            <span class="news-date">20 January 2025</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <p style="font-size:13px; color:var(--muted); font-weight:300;">Updated regularly · Managed via Admin Dashboard</p>
+      <a href="#" class="btn btn-line">More News →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ABOUT ═══ -->
+<div class="section-wrap about-wrap" id="about">
+  <div class="about-glow"></div>
+  <div class="section-inner">
+    <div class="about-inner-grid">
+      <div>
+        <div class="section-tag">About the Club</div>
+        <h2 class="about-quote">Built on <span class="g">Pride.</span> Forged in <span class="g">Dedza.</span></h2>
+        <p class="about-body">Goshen City Dedza Dynamos FC was founded in 2024 with one mission — to bring top-flight football to Dedza and represent the heart of Central Malawi. In our debut TNM Super League season, we've shown the nation that the Dynamos are here to stay.</p>
+        <p class="about-body" style="margin-top:-12px;">Yellow and black isn't just our colours — it's our identity. Our commitment to the community, to youth development, and to winning football drives everything we do.</p>
+        <div class="about-pillars" style="margin-bottom:32px;">
+          <div class="about-pillar"><div class="ap-icon">⚡</div><div class="ap-title">Community First</div><div class="ap-desc">Rooted in Dedza, representing Central Malawi.</div></div>
+          <div class="about-pillar"><div class="ap-icon">🏆</div><div class="ap-title">Win the League</div><div class="ap-desc">TNM Super League glory is the destination.</div></div>
+          <div class="about-pillar"><div class="ap-icon">🌱</div><div class="ap-title">Youth Academy</div><div class="ap-desc">Developing the next generation of Dynamos.</div></div>
+          <div class="about-pillar"><div class="ap-icon">🖤</div><div class="ap-title">Yellow & Black</div><div class="ap-desc">Our identity, our colours, our pride.</div></div>
+        </div>
+        <a href="#" class="btn btn-solid">Full Club Story →</a>
+      </div>
+      <div class="about-crest-block">
+        <div class="about-crest-ring">
+          <div class="about-crest-inner">
+            <svg width="160" height="160" viewBox="0 0 200 200" fill="none">
+              <path d="M100 8 L176 36 L176 112 L100 192 L24 112 L24 36 Z" fill="#111" stroke="#F5C800" stroke-width="2.5"/>
+              <path d="M100 18 L166 42 L166 108 L100 178 L34 108 L34 42 Z" fill="none" stroke="rgba(245,200,0,0.18)" stroke-width="1"/>
+              <line x1="34" y1="95" x2="166" y2="95" stroke="#F5C800" stroke-width="1.5" stroke-opacity="0.4"/>
+              <text x="100" y="75" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="44" fill="#F5C800" letter-spacing="4">GC</text>
+              <text x="100" y="116" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="13" fill="#F5C800" letter-spacing="3">DYNAMOS</text>
+              <text x="100" y="134" text-anchor="middle" font-family="'Barlow Condensed',sans-serif" font-size="9" fill="rgba(245,200,0,0.5)" letter-spacing="4">DEDZA · MALAWI</text>
+              <polygon points="100,148 103,157 112,157 105,163 108,172 100,167 92,172 95,163 88,157 97,157" fill="#F5C800" opacity="0.65"/>
+            </svg>
+          </div>
+        </div>
+        <div class="about-stats-row">
+          <div class="ast-item"><div class="ast-num">2024</div><div class="ast-lbl">Founded</div></div>
+          <div class="ast-item"><div class="ast-num">25</div><div class="ast-lbl">Players</div></div>
+          <div class="ast-item"><div class="ast-num">1st</div><div class="ast-lbl">Season</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TICKETS TEASER ═══ -->
+<div class="section-wrap tickets-wrap" id="tickets">
+  <div class="tickets-glow"></div>
+  <div class="section-inner">
+    <div class="section-tag">Official Ticketing Partner · EventCore Africa</div>
+    <h2 class="section-heading">Match <span class="g">Tickets</span></h2>
+    <p class="section-desc">Digital matchday tickets via EventCore Africa. Fast, mobile-first, cashless — coming soon.</p>
+
+    <div class="tickets-grid">
+      <div class="ticket-card featured">
+        <div class="ticket-corner"></div>
+        <span class="tc-label">Most Popular</span>
+        <div class="tc-name">Terraces Stand</div>
+        <div class="tc-desc">The beating heart of Dedza Stadium. Join the ultras, feel the atmosphere, live the Dynamos experience.</div>
+        <div class="tc-price">
+          <span class="tc-currency">MK</span>
+          <span class="tc-amount">3,500</span>
+          <span class="tc-per">per match</span>
+        </div>
+        <div class="coming-soon-badge">
+          <div class="cs-dot"></div>
+          <span class="cs-text">Coming Soon — EventCore Africa</span>
+        </div>
+        <div class="btn-coming">Tickets Available Soon ↗</div>
+        <div class="eventcore-strip">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="3" fill="#F5C800" opacity="0.12"/><rect x="2" y="2" width="16" height="16" rx="3" stroke="#F5C800" stroke-width="1" fill="none"/><text x="10" y="14" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="10" fill="#F5C800">EC</text></svg>
+          <p>Powered by <strong>EventCore Africa Limited</strong> — Malawi's premier digital ticketing platform.</p>
+        </div>
+      </div>
+      <div class="ticket-card">
+        <span class="tc-label">Premium</span>
+        <div class="tc-name">VIP Grand Stand</div>
+        <div class="tc-desc">Premium covered seating. VIP lounge, pre-match hospitality, and the best view in Dedza Stadium.</div>
+        <div class="tc-price">
+          <span class="tc-currency">MK</span>
+          <span class="tc-amount">12,000</span>
+          <span class="tc-per">per match</span>
+        </div>
+        <div class="coming-soon-badge">
+          <div class="cs-dot"></div>
+          <span class="cs-text">Coming Soon — EventCore Africa</span>
+        </div>
+        <div class="btn-coming">VIP Tickets Available Soon ↗</div>
+        <div class="eventcore-strip">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="3" fill="#F5C800" opacity="0.12"/><rect x="2" y="2" width="16" height="16" rx="3" stroke="#F5C800" stroke-width="1" fill="none"/><text x="10" y="14" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="10" fill="#F5C800">EC</text></svg>
+          <p>Powered by <strong>EventCore Africa Limited</strong> — secure checkout, instant QR code to your phone.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FAN LOGIN ═══ -->
+<div class="section-wrap login-section" id="fan-zone">
+  <div class="section-inner">
+    <div class="login-inner">
+      <div class="login-promo">
+        <div class="section-tag">Fan Zone</div>
+        <h2>Join The <span>Dynamos</span> Family</h2>
+        <p>Create your free fan account and unlock exclusive content, match alerts, and behind-the-scenes access. Powered by Firebase Auth.</p>
+        <ul class="login-perks">
+          <li>Match day notifications & alerts</li>
+          <li>Exclusive behind-the-scenes content</li>
+          <li>Priority ticket access when live</li>
+          <li>Player stats & match analytics</li>
+          <li>Fan forum & community</li>
+          <li>Club merchandise discounts</li>
+        </ul>
+      </div>
+      <div class="login-box">
+        <div class="login-tabs">
+          <button class="ltab active" onclick="switchTab('signin')">Sign In</button>
+          <button class="ltab" onclick="switchTab('signup')">Create Account</button>
+        </div>
+        <div class="login-form" id="auth-form">
+          <div class="lf-group">
+            <label class="lf-label">Email Address</label>
+            <input class="lf-input" type="email" id="auth-email" placeholder="your@email.com">
+          </div>
+          <div class="lf-group">
+            <label class="lf-label">Password</label>
+            <input class="lf-input" type="password" id="auth-pass" placeholder="••••••••">
+          </div>
+          <div class="lf-error" id="auth-error"></div>
+          <button class="btn-auth" id="auth-submit-btn" onclick="handleAuth()">Sign In</button>
+        </div>
+        <p style="font-size:11px; color:var(--muted); margin-top:16px; line-height:1.6;">
+          Authentication powered by Firebase Auth. Your data is secure and never shared.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<footer>
+  <div class="footer-inner">
+    <div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px;">
+        <svg width="38" height="38" viewBox="0 0 80 80" fill="none">
+          <polygon points="40,4 72,18 72,54 40,76 8,54 8,18" fill="#070707" stroke="#F5C800" stroke-width="2"/>
+          <text x="40" y="36" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="16" fill="#F5C800" letter-spacing="1">GC</text>
+          <text x="40" y="52" text-anchor="middle" font-family="'Bebas Neue',sans-serif" font-size="9" fill="rgba(245,200,0,0.6)" letter-spacing="2">DYNAMOS</text>
+        </svg>
+        <div>
+          <div style="font-family:var(--font-display); font-size:17px; color:var(--gold); letter-spacing:2px;">Goshen City Dedza Dynamos FC</div>
+          <div style="font-family:var(--font-cond); font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase;">TNM Super League · Malawi · Est. 2024</div>
+        </div>
+      </div>
+      <p class="footer-tagline">Built on pride, passion, and the spirit of Dedza. Goshen City Dynamos — rising to the top flight and beyond.</p>
+      <div class="footer-socials">
+        <a href="#" class="fsoc">FB</a>
+        <a href="#" class="fsoc">TW</a>
+        <a href="#" class="fsoc">IG</a>
+        <a href="#" class="fsoc">YT</a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Club</h4>
+      <ul>
+        <li><a href="#about">About the Club</a></li>
+        <li><a href="#">History</a></li>
+        <li><a href="#">Dedza Stadium</a></li>
+        <li><a href="#">Management</a></li>
+        <li><a href="#">Careers</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Football</h4>
+      <ul>
+        <li><a href="#squad">First Team</a></li>
+        <li><a href="#fixtures">Fixtures</a></li>
+        <li><a href="#fixtures">Results</a></li>
+        <li><a href="#">Youth Academy</a></li>
+        <li><a href="#">Women's Team</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Fans</h4>
+      <ul>
+        <li><a href="#fan-zone">Fan Login</a></li>
+        <li><a href="#tickets">Tickets</a></li>
+        <li><a href="#">Membership</a></li>
+        <li><a href="#">Fan Groups</a></li>
+        <li><a href="#">Contact Us</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2025 Goshen City Dedza Dynamos FC. All rights reserved.</p>
+    <p>Ticketing powered by <strong>EventCore Africa Limited</strong></p>
+    <p>Built on <strong>Firebase</strong> · Auth · Firestore · Storage</p>
+  </div>
+</footer>
+
+<!-- ═══ AUTH MODAL ═══ -->
+<div class="modal-overlay" id="auth-modal" onclick="closeModal(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    <div class="modal-title">Fan Login</div>
+    <div class="login-form">
+      <div class="lf-group">
+        <label class="lf-label">Email</label>
+        <input class="lf-input" type="email" id="modal-email" placeholder="your@email.com">
+      </div>
+      <div class="lf-group">
+        <label class="lf-label">Password</label>
+        <input class="lf-input" type="password" id="modal-pass" placeholder="••••••••">
+      </div>
+      <div class="lf-error" id="modal-error"></div>
+      <button class="btn-auth" onclick="handleModalAuth()">Sign In</button>
+    </div>
+    <p style="font-size:11px; color:var(--muted); margin-top:14px; line-height:1.6;">
+      Don't have an account? <a href="#fan-zone" onclick="closeModalDirect()" style="color:var(--gold);">Create one free →</a>
+    </p>
+  </div>
+</div>
+
+<!-- ═══ JS ═══ -->
+<script>
+  // ── MOBILE MENU ──
+  function toggleMenu() {
+    document.getElementById('mobile-menu').classList.toggle('open');
+  }
+
+  // ── AUTH TAB SWITCH ──
+  let currentTab = 'signin';
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.ltab').forEach((el, i) => {
+      el.classList.toggle('active', (tab === 'signin' && i === 0) || (tab === 'signup' && i === 1));
+    });
+    document.getElementById('auth-submit-btn').textContent = tab === 'signin' ? 'Sign In' : 'Create Account';
+  }
+
+  // ── HANDLE AUTH ──
+  async function handleAuth() {
+    const email = document.getElementById('auth-email').value.trim();
+    const pass  = document.getElementById('auth-pass').value;
+    const err   = document.getElementById('auth-error');
+    err.classList.remove('show');
+    if (!email || !pass) { err.textContent = 'Please fill in all fields.'; err.classList.add('show'); return; }
+    try {
+      if (currentTab === 'signin') {
+        await window.fbSignIn(email, pass);
+      } else {
+        await window.fbSignUp(email, pass);
+      }
+      document.getElementById('auth-email').value = '';
+      document.getElementById('auth-pass').value = '';
+      // Show admin banner if stored role
+      checkAdminRole();
+    } catch(e) {
+      err.textContent = e.message.replace('Firebase: ', '').replace(/\(auth\/[^)]+\)/, '').trim();
+      err.classList.add('show');
+    }
+  }
+
+  // ── MODAL ──
+  function openModal() { document.getElementById('auth-modal').classList.add('open'); }
+  function closeModal(e) { if (e.target === document.getElementById('auth-modal')) closeModalDirect(); }
+  function closeModalDirect() { document.getElementById('auth-modal').classList.remove('open'); }
+
+  async function handleModalAuth() {
+    const email = document.getElementById('modal-email').value.trim();
+    const pass  = document.getElementById('modal-pass').value;
+    const err   = document.getElementById('modal-error');
+    err.classList.remove('show');
+    if (!email || !pass) { err.textContent = 'Please fill in both fields.'; err.classList.add('show'); return; }
+    try {
+      await window.fbSignIn(email, pass);
+      closeModalDirect();
+    } catch(e) {
+      err.textContent = e.message.replace('Firebase: ', '').replace(/\(auth\/[^)]+\)/, '').trim();
+      err.classList.add('show');
+    }
+  }
+
+  // ── ADMIN BANNER ──
+  // In production: check Firestore users/{uid}.role === 'admin' or 'editor'
+  function checkAdminRole() {
+    // Demo: show banner for any logged-in user until Firestore role check is implemented
+    // Replace with: db.collection('users').doc(auth.currentUser.uid).get()
+    //               then check data.role === 'admin' || 'editor'
+    const banner = document.getElementById('admin-banner');
+    if (window.fbAuth && window.fbAuth.currentUser) {
+      banner.classList.add('visible');
+    } else {
+      banner.classList.remove('visible');
+    }
+  }
+
+  // ── CLOSE MENU ON SCROLL ──
+  window.addEventListener('scroll', () => {
+    document.getElementById('mobile-menu').classList.remove('open');
+  });
+
+  // ── KEYBOARD ESC ──
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModalDirect();
+  });
+</script>
+
+</body>
+</html>
